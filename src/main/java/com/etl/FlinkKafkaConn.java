@@ -11,6 +11,8 @@ import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
+import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
@@ -22,6 +24,7 @@ import javax.annotation.Nullable;
 import java.util.Properties;
 
 import static com.etl.StringUtils.stringToBytes;
+import static com.etl.StringUtils.timestampNow;
 import static org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer.Semantic;
 
 public class FlinkKafkaConn {
@@ -89,8 +92,31 @@ public class FlinkKafkaConn {
     }
 
     public static void windowJoin(String inTopic1, String inTopic2, String outTopic, StreamExecutionEnvironment env, Properties properties) throws Exception {
-        DataStream<Transaction> txnStream = consumeStream(inTopic1, env, properties).map(Transaction::fromJSONString).keyBy(x->x.txnID);
-        DataStream<PosTxnReq> postxnStream = consumeStream(inTopic2, env, properties).map(PosTxnReq::fromJSONString).keyBy(x->x.txnID);
+        DataStream<Transaction> txnStream = consumeStream(inTopic1, env, properties).map(Transaction::fromJSONString).keyBy(x->x.txnID).assignTimestampsAndWatermarks(new AssignerWithPeriodicWatermarks<Transaction>() {
+            @Nullable
+            @Override
+            public Watermark getCurrentWatermark() {
+                return new Watermark(timestampNow());
+            }
+
+            @Override
+            public long extractTimestamp(Transaction element, long previousElementTimestamp) {
+                return timestampNow();
+            }
+        });
+        DataStream<PosTxnReq> postxnStream = consumeStream(inTopic2, env, properties).map(PosTxnReq::fromJSONString).keyBy(x->x.txnID).assignTimestampsAndWatermarks(new AssignerWithPeriodicWatermarks<PosTxnReq>() {
+            @Nullable
+            @Override
+            public Watermark getCurrentWatermark() {
+                return new Watermark(timestampNow());
+            }
+
+            @Override
+            public long extractTimestamp(PosTxnReq element, long previousElementTimestamp) {
+                return timestampNow();
+            }
+        });
+
         DataStream<PosTxnExpanded> outputStream = postxnStream.join(txnStream).where(new KeySelector<PosTxnReq, Integer>() {
             public Integer getKey(PosTxnReq req) {
                 return req.txnID;
@@ -100,12 +126,14 @@ public class FlinkKafkaConn {
             public Integer getKey(Transaction txn) throws Exception {
                 return txn.txnID;
             }
-        }).window(TumblingEventTimeWindows.of(Time.seconds(5))).apply(new JoinFunction<PosTxnReq, Transaction, PosTxnExpanded>() {
+        }).window(TumblingEventTimeWindows.of(Time.days(1))).apply(new JoinFunction<PosTxnReq, Transaction, PosTxnExpanded>() {
             @Override
             public PosTxnExpanded join(PosTxnReq req, Transaction txn) throws Exception {
                 return new PosTxnExpanded(txn, req);
             }
         });
+        outputStream.print();
+        System.out.println("printing output stream done");
         sinkStream(outTopic, outputStream.map(PosTxnExpanded::toJSONString), env, properties);
     }
 }
