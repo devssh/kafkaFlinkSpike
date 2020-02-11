@@ -9,6 +9,7 @@ public class PosTxnExpanded {
     final float amt;
     final String account;
     final int MCC;
+
     public PosTxnExpanded(Transaction inmem, PosTxnReq req) {
         if (inmem.txnID != req.txnID) {
             throw new NullPointerException("txnID do not match in PosTXN and TXN");
