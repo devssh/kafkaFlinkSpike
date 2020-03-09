@@ -38,4 +38,12 @@ public class PosTxnReq {
         };
         return map;
     }
+
+    @Override
+    public String toString() {
+        return "PosTxnReq{" +
+                "txnID=" + txnID +
+                ", MCC=" + MCC +
+                '}';
+    }
 }

@@ -2,6 +2,7 @@ package com.etl;
 
 import com.inmem.Transaction;
 import com.pos.PosTxnReq;
+import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
@@ -23,8 +24,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import javax.annotation.Nullable;
 import java.util.Properties;
 
-import static com.etl.StringUtils.stringToBytes;
-import static com.etl.StringUtils.timestampNow;
+import static com.etl.StringUtils.*;
 import static org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer.Semantic;
 
 public class FlinkKafkaConn {
@@ -48,7 +48,7 @@ public class FlinkKafkaConn {
     }
 
     public static void sinkStream(String topic, DataStream<String> stream, MapFunction<String, String> etl, StreamExecutionEnvironment env, Properties properties) throws Exception {
-        System.out.println("here3");
+        System.out.println("sinking expanded stream");
         FlinkKafkaProducer<String> myProducer = new FlinkKafkaProducer<String>(topic,
                 new KafkaSerializationSchema<String>() {
                     @Override
@@ -64,7 +64,8 @@ public class FlinkKafkaConn {
                 }, properties, Semantic.EXACTLY_ONCE);
 //        stream.timeWindowAll(Time.minutes(1));
         stream.addSink(myProducer);
-        env.execute();
+        JobExecutionResult execute = env.execute();
+        return execute.;
     }
 
     public static void sinkStream(String topic, DataStream<String> stream, StreamExecutionEnvironment env, Properties properties) throws Exception {
@@ -104,6 +105,10 @@ public class FlinkKafkaConn {
                 return timestampNow();
             }
         });
+
+        System.out.println("Print txn stream");
+        txnStream.print();
+
         DataStream<PosTxnReq> postxnStream = consumeStream(inTopic2, env, properties).map(PosTxnReq::fromJSONString).keyBy(x->x.txnID).assignTimestampsAndWatermarks(new AssignerWithPeriodicWatermarks<PosTxnReq>() {
             @Nullable
             @Override
@@ -116,6 +121,8 @@ public class FlinkKafkaConn {
                 return timestampNow();
             }
         });
+        System.out.println("Print postxn stream");
+        postxnStream.print();
 
         DataStream<PosTxnExpanded> outputStream = postxnStream.join(txnStream).where(new KeySelector<PosTxnReq, Integer>() {
             public Integer getKey(PosTxnReq req) {
@@ -132,6 +139,7 @@ public class FlinkKafkaConn {
                 return new PosTxnExpanded(txn, req);
             }
         });
+        System.out.println("print output stream ");
         outputStream.print();
         System.out.println("printing output stream done");
         sinkStream(outTopic, outputStream.map(PosTxnExpanded::toJSONString), env, properties);

@@ -41,4 +41,13 @@ public class Transaction {
         };
         return map;
     }
+
+    @Override
+    public String toString() {
+        return "Transaction{" +
+                "txnID=" + txnID +
+                ", amt=" + amt +
+                ", account='" + account + '\'' +
+                '}';
+    }
 }
