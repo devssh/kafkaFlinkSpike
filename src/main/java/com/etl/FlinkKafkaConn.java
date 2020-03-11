@@ -1,5 +1,6 @@
 package com.etl;
 
+import akka.remote.serialization.ProtobufSerializer;
 import com.inmem.Transaction;
 import com.pos.PosTxnReq;
 import org.apache.flink.api.common.JobExecutionResult;
@@ -36,13 +37,16 @@ public class FlinkKafkaConn {
 
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+//        env.getConfig().addDefaultKryoSerializer(Transaction.class, TBaseSerializer.class);
+//        env.getConfig().addDefaultKryoSerializer(PosTxnReq.class, TBaseSerializer.class);
+
 
         return new Tuple2<StreamExecutionEnvironment, Properties>(env, properties);
     }
 
     public static DataStream<String> consumeStream(String topic, StreamExecutionEnvironment env, Properties properties) {
         FlinkKafkaConsumer<String> myConsumer = new FlinkKafkaConsumer<String>(topic, new SimpleStringSchema(), properties);
-        myConsumer.setStartFromEarliest();     // start from the earliest record possible
+        myConsumer.setStartFromGroupOffsets();     // start from the earliest record possible
         DataStream<String> stream = env.addSource(myConsumer);
         return stream;
     }
@@ -65,7 +69,6 @@ public class FlinkKafkaConn {
 //        stream.timeWindowAll(Time.minutes(1));
         stream.addSink(myProducer);
         JobExecutionResult execute = env.execute();
-        return execute.;
     }
 
     public static void sinkStream(String topic, DataStream<String> stream, StreamExecutionEnvironment env, Properties properties) throws Exception {
@@ -82,7 +85,7 @@ public class FlinkKafkaConn {
     }
 
     public static void mapTxnETL(MapFunction<String, String> etl, String inTopic, String outTopic, StreamExecutionEnvironment env, Properties properties) throws Exception {
-        DataStream<Transaction> txnStream = consumeStream(inTopic, env, properties).map(Transaction::fromJSONString).keyBy("txnID");
+        DataStream<Transaction> txnStream = consumeStream(inTopic, env, properties).map(Transaction::fromJSONString);
         sinkStream(outTopic, txnStream.map(Transaction::toJSONString), etl, env, properties);
     }
 

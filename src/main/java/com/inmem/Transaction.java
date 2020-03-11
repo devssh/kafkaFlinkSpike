@@ -1,6 +1,8 @@
 package com.inmem;
 
+import com.etl.PosTxnExpanded;
 import com.google.gson.Gson;
+import com.pos.PosTxnReq;
 import org.apache.flink.api.common.functions.MapFunction;
 
 public class Transaction {
@@ -18,6 +20,10 @@ public class Transaction {
     public String toJSONString() {
         Gson gson = new Gson();
         return gson.toJson(this);
+    }
+
+    public PosTxnExpanded expand(PosTxnReq req) {
+        return new PosTxnExpanded(this, req);
     }
 
     public static Transaction fromJSONString(String some) {
