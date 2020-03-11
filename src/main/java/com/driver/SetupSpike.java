@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Properties;
 
 import static com.etl.FlinkKafkaConn.*;
+import static com.etl.PosTxnExpanded.idealScenario;
 
 public class SetupSpike {
     public static void main(String[] args) throws Exception {
@@ -76,6 +77,7 @@ public class SetupSpike {
         }
 
         System.out.println("created expanded stream");
+        idealScenario();
         expandedDataStream.print();
         sinkStream("txn2", expandedDataStream.map(PosTxnExpanded::toJSONString), env, properties);
 
